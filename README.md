@@ -11,12 +11,16 @@ Gatech Campus Finder
     * cpanm Mango
 * Mojolicious::Plugin::BasicAuth
     * cpanm Mojolicious::Plugin::BasicAuth
+* Crypt::SaltedHash
+    * cpanm Crypt::SaltedHash
 
 ## Running
 * Basic
     * `./server.pl daemon -l http://*:8080`
 * Alternatively, you can run with the morbo development server, which reloads application after each change
     * `morbo server.pl`
+* To run in background disconnected from terminal
+    * `nohup ./server.pl daemon -l http://*:8080&`
 
 ## References
 * http://mojolicious.org/perldoc/Mojolicious/Guides/Tutorial

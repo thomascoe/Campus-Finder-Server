@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 
+use Crypt::SaltedHash;
 use Mojolicious::Lite;
 use Mojo::JSON qw(decode_json encode_json);
 use Mango;
@@ -11,7 +12,7 @@ plugin 'basic_auth';
 my $uri = 'mongodb://127.0.0.1:27017/test';
 helper mango => sub { state $m = Mango->new($uri) };
 
-#get '/' => {text => 'Campus Finder'};
+get '/' => {text => 'Gatech Campus Finder'};
 
 group {
     under '/v1';
@@ -36,12 +37,15 @@ group {
             my $doc = $collection->find_one({username => $username});
 
             # Verify Password
-            # TODO: implement hashing
-            if (not defined $doc or $password ne $doc->{password}) {
+            my $validpw = Crypt::SaltedHash->validate($doc->{password}, $password);
+            if (not defined $doc or not $validpw) {
                 $c->respond_to(any => { json => {error => 'Invalid Credentials'},
                                         status => 401});
                 return;
             }
+
+            #$c->respond_to(any => { json => $doc, status => 200});
+            #return;
 
             # Check if Email is Verified
             if ($doc->{emailverstat} ne 'verified') {
@@ -51,7 +55,7 @@ group {
             }
 
             # Generate token for user
-            #TODO: Generate real token
+            #TODO: Generate and store real token
             my $token = 'abcdef123';
             $c->respond_to(any => { json => {token => $token},
                                     status => 200});
@@ -70,18 +74,6 @@ group {
                 return;
             }
 
-            # Mongo Collection
-            my $collection = $c->mango->db->collection('user');
-
-            # Check if user already exists
-            my $doc1 = $collection->find_one({username => $username});
-            my $doc2 = $collection->find_one({email => $email});
-            if (defined $doc1 or defined $doc2) {
-                $c->respond_to(any => { json => {error => 'User Already Exists'},
-                                        status => 409});
-                return;
-            }
-
             #TODO: Check if strong password
             if (undef) {
                 $c->respond_to(any => { json => {error => 'Weak Password'},
@@ -89,92 +81,55 @@ group {
                 return;
             }
 
-            #TODO: Hash/salt password
+            # Check if user already exists
+            my $collection = $c->mango->db->collection('user');
+            my $doc1 = $collection->find_one({username => $username});
+            my $doc2 = $collection->find_one({email => $email});
+            #my $docs = $collection->find->all();
+            if (defined $doc1 or defined $doc2) {
+                $c->respond_to(any => { json => {error => 'User Already Exists'},
+                                        status => 409});
+                return;
+            }
+
+            # Hash/salt password
+            my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-1');
+            $csh->add($password);
+            my $saltedhash = $csh->generate;
+
             # Insert user into DB
             my $oid = $collection->insert({
                 username => $username,
                 email => $email,
                 emailverstat => 'unverified',
-                password => $password,
+                password => $saltedhash,
                 radius => 1
             });
+
+            #TODO: Send email to new user with confirmation link
 
             # Send response
             $c->respond_to(any => { json => {userid => $oid},
                                     status => 200});
         };
     };
+
+    # Everything in this group will require authentication
+    group {
+        under '/secure' => sub {
+            my $c = shift;
+            return $c->basic_auth( realm => sub {
+                my $user = shift;
+                my $pass = shift;
+                #TODO: Store user/pass instead of hardcode
+                if ($user eq 'username' && $pass eq '123') {
+                    return 1;
+                }
+            });
+        };
+    };
 };
 
 
-
-
-
-
-
-# Everything in this group will require authentication
-group {
-    under '/auth' => sub {
-        my $c = shift;
-        return $c->basic_auth( realm => sub {
-            my $user = shift;
-            my $pass = shift;
-            #TODO: Store user/pass instead of hardcode
-            if ($user eq 'username' && $pass eq '123') {
-                return 1;
-            }
-        });
-    };
-
-    # Store user
-    get '/insert/users/:name' => sub {
-        my $c   = shift;
-
-        # Get parameters from URL
-        my $name = $c->param('name');
-        my $age = $c->param('age');
-
-        # Mongo DB
-        my $collection = $c->mango->db->collection('user');
-
-        # Insert into DB
-        my $oid = $collection->insert({
-            name => $name,
-            age => $age
-        });
-
-        # Render text
-        $c->render(text => "Object $oid created in db");
-    };
-
-    get '/get/users' => sub {
-        my $c   = shift;
-
-        # Mongo DB
-        my $collection = $c->mango->db->collection('user');
-
-        my $docs = $collection->find->all();
-
-        $c->render(json => $docs);
-    };
-
-    # Get user
-    get '/get/users/:name' => sub {
-        my $c   = shift;
-
-        # Get parameters from URL
-        my $name = $c->param('name');
-
-        # Mongo DB
-        my $collection = $c->mango->db->collection('user');
-
-        # Retrieve user from DB
-        my $doc = $collection->find_one({name => $name});
-
-        # Render result
-        $c->render(json => $doc);
-    };
-
-};
 
 app->start;
