@@ -93,7 +93,7 @@ group {
             }
 
             # Hash/salt password
-            my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-1');
+            my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-256');
             $csh->add($password);
             my $saltedhash = $csh->generate;
 
