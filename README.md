@@ -6,11 +6,11 @@ Gatech Campus Finder
 * MongoDB
     * (mongod running on local server)
 * Mojolicious
-    * (from CPAN)
+    * cpanm Mojolicious::Lite
 * Mango
-    * (from CPAN)
-* Mojolicous::Plugin::BasicAuth
-    * (from CPAN)
+    * cpanm Mango
+* Mojolicious::Plugin::BasicAuth
+    * cpanm Mojolicious::Plugin::BasicAuth
 
 ## Running
 * Basic
