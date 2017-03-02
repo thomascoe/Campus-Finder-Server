@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 
+use Time::Piece;
 use Crypt::SaltedHash;
 use Mojolicious::Lite;
 use Mojo::JSON qw(decode_json encode_json);
@@ -33,8 +34,8 @@ group {
             }
 
             # Lookup user in DB
-            my $collection = $c->mango->db->collection('user');
-            my $doc = $collection->find_one({username => $username});
+            my $users = $c->mango->db->collection('user');
+            my $doc = $users->find_one({username => $username});
 
             # Verify Password
             my $validpw = Crypt::SaltedHash->validate($doc->{password}, $password);
@@ -48,16 +49,27 @@ group {
             #return;
 
             # Check if Email is Verified
-            if ($doc->{emailverstat} ne 'verified') {
+            # TODO: Remove 'undef and'
+            if (undef and $doc->{emailverstat} ne 'verified') {
                 $c->respond_to(any => { json => {error => 'Awaiting Email Verification'},
                                         status => 403});
                 return;
             }
 
             # Generate token for user
-            #TODO: Generate and store real token
-            my $token = 'abcdef123';
-            $c->respond_to(any => { json => {token => $token},
+            my $token = unpack 'h32', `head -c 16 /dev/urandom`;
+            my $timestring = gmtime->datetime . 'Z';
+
+            # Store session in db
+            my $sessions = $c->mango->db->collection('sessions');
+            my $oid = $sessions->insert({
+                username => $username,
+                token => $token,
+                timestamp => $timestring
+            });
+
+            # Send response to client
+            $c->respond_to(any => { json => {username => $username, token => $token},
                                     status => 200});
         };
 
@@ -82,10 +94,10 @@ group {
             }
 
             # Check if user already exists
-            my $collection = $c->mango->db->collection('user');
-            my $doc1 = $collection->find_one({username => $username});
-            my $doc2 = $collection->find_one({email => $email});
-            #my $docs = $collection->find->all();
+            my $users = $c->mango->db->collection('user');
+            my $doc1 = $users->find_one({username => $username});
+            my $doc2 = $users->find_one({email => $email});
+            #my $docs = $users->find->all();
             if (defined $doc1 or defined $doc2) {
                 $c->respond_to(any => { json => {error => 'User Already Exists'},
                                         status => 409});
@@ -98,7 +110,7 @@ group {
             my $saltedhash = $csh->generate;
 
             # Insert user into DB
-            my $oid = $collection->insert({
+            my $oid = $users->insert({
                 username => $username,
                 email => $email,
                 emailverstat => 'unverified',
@@ -112,20 +124,45 @@ group {
             $c->respond_to(any => { json => {userid => $oid},
                                     status => 200});
         };
+
+        post '/resetpass' => sub {
+            my $c = shift;
+            my $email = $c->param('email');
+            my $users = $c->mango->db->collection('user');
+            my $doc = $users->find_one({email => $email});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => 'User Not Found'},
+                                        status => 400});
+                return;
+            }
+
+            #TODO: Send email with password reset link
+            $c->respond_to(any => { json => {}, status => 200});
+        };
     };
 
     # Everything in this group will require authentication
     group {
-        under '/secure' => sub {
+        under sub {
             my $c = shift;
             return $c->basic_auth( realm => sub {
                 my $user = shift;
-                my $pass = shift;
-                #TODO: Store user/pass instead of hardcode
-                if ($user eq 'username' && $pass eq '123') {
+                my $token = shift;
+
+                # Lookup session in the db
+                my $sessions = $c->mango->db->collection('sessions');
+                my $doc = $sessions->find_one({username => $user, token => $token});
+                if (defined $doc) {
                     return 1;
                 }
             });
+        };
+
+        get '/types' => sub {
+            my $c = shift;
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+            $c->respond_to(any => { json => {"status" => "success"},
+                                    status => 200});
         };
     };
 };
