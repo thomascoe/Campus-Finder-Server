@@ -250,8 +250,8 @@ group {
             my $c = shift;
             my $locations = $c->mango->db->collection('locations');
 
-            # TODO: Allow filter by type
-            my $docs = $locations->find({}, {_id => 0})->all;
+            # TODO: Allow filter by type? maybe do client side?
+            my $docs = $locations->find({}, {name => 1, type => 1, latitude => 1, longitude => 1})->all;
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
@@ -264,10 +264,12 @@ group {
                     or not defined $loc->{description}
                     or not defined $loc->{latitude}
                     or not defined $loc->{longitude}) {
-                $c->respond_to(any => { json => {error => 'Missing Required Params'},
+                $c->respond_to(any => { json => {error => 'Missing Required Params (name, type, descriptions, latitude, longitude)'},
                                         status => 400});
                 return;
             }
+
+            # TODO: Verify type is valid
 
             # Set extra params
             $loc->{username} = $user;
@@ -280,6 +282,91 @@ group {
             $locations->insert($loc);
 
             $c->respond_to(any => { json => $loc, status => 200});
+        };
+
+        get '/locations/:locationid' => sub {
+            my $c = shift;
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+
+            # Look up location
+            my $locid = $c->param('locationid');
+            my $oid = Mango::BSON::ObjectID->new($locid);
+            my $locations = $c->mango->db->collection('locations');
+            my $doc = $locations->find_one({_id => $oid});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => "Location not found"}, status => 404});
+                return;
+            }
+
+            # Look up this user's vote
+            my $votes = $c->mango->db->collection('votes');
+            my $votedoc = $votes->find_one({locationid => $locid, username => $user});
+            my $vote = 0;
+            if (defined $votedoc) {
+                $vote = $votedoc->{vote};
+            }
+            $doc->{myvote} = $vote;
+            $c->respond_to(any => { json => $doc, status => 200});
+        };
+
+        post '/locations/:locationid/vote' => sub {
+            my $c = shift;
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+            my $vote = $c->param('vote') + 0;
+            my $locid = $c->param('locationid');
+
+            # Verify vote
+            if ((not defined $vote) or ($vote ne 1 and $vote ne 0 and $vote ne -1)) {
+                $c->respond_to(any => { json => {error => "Invalid vote"}, status => 400});
+                return;
+            }
+
+            # Look up location
+            my $oid = Mango::BSON::ObjectID->new($locid);
+            my $locations = $c->mango->db->collection('locations');
+            my $doc = $locations->find_one({_id => $oid});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => "Location not found"}, status => 404});
+                return;
+            }
+
+            # Look up this user's vote
+            my $votes = $c->mango->db->collection('votes');
+            my $votedoc = $votes->find_one({locationid => $locid, username => $user});
+            my $oldvote = 0;
+            if (defined $votedoc) {
+                $oldvote = $votedoc->{vote};
+            }
+
+            # Calculate the upvote/downvote differentials
+            my $upvotes = 0;
+            my $downvotes = 0;
+            if ($vote eq 0) {
+                if ($oldvote eq 1) {
+                    $upvotes = -1;
+                } elsif ($oldvote eq -1) {
+                    $downvotes = -1;
+                }
+            } elsif ($vote eq 1) {
+                if ($oldvote eq -1) {
+                    $upvotes = 1;
+                    $downvotes = -1;
+                } elsif ($oldvote eq 0) {
+                    $upvotes = 1;
+                }
+            } elsif ($vote eq -1) {
+                if ($oldvote eq 1) {
+                    $upvotes = -1;
+                    $downvotes = 1;
+                } elsif ($oldvote eq 0) {
+                    $downvotes = 1;
+                }
+            }
+
+            # Update the DB
+            $locations->update({_id => $oid}, {'$inc' => {upvotes => $upvotes, downvotes => $downvotes}});
+            $votes->update({locationid => $locid, username => $user}, {'$set' => {vote => $vote}}, {upsert => 1});
+            $c->respond_to(any => { json => {}, status => 200});
         };
     };
 };
