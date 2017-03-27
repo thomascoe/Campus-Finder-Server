@@ -9,7 +9,7 @@ use Mojo::JSON qw(decode_json encode_json);
 use Mango;
 plugin 'basic_auth';
 
-sub sendemail {
+sub send_email {
     my ($to, $from, $subject, $body) = @_;
     `echo "$body" | mail -s "$subject" -r "$from" $to`;
 }
@@ -18,6 +18,13 @@ sub is_strong_pass {
     my ($pass) = @_;
     # TODO: Implement pass strength check
     return 1;
+}
+
+sub gen_hash {
+    my ($var) = @_;
+    my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-256');
+    $csh->add($var);
+    return $csh->generate;
 }
 
 # Database connection
@@ -111,9 +118,7 @@ group {
             }
 
             # Hash/salt password
-            my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-256');
-            $csh->add($password);
-            my $saltedhash = $csh->generate;
+            my $saltedhash = gen_hash($password);
 
             # Generate verification code
             my $code = unpack 'h32', `head -c 16 /dev/urandom`;
@@ -133,7 +138,7 @@ group {
             my $from = 'campusfinder@thomascoe.com';
             my $subject = 'Welcome to Campus Finder!';
             my $body = "Please verify your email to activate your account\n$link";
-            sendemail($email, $from, $subject, $body);
+            send_email($email, $from, $subject, $body);
 
             # Send response
             $c->respond_to(any => { json => {userid => $oid},
@@ -218,9 +223,7 @@ group {
             }
 
             # Hash/salt password
-            my $csh = Crypt::SaltedHash->new(algorithm => 'SHA-256');
-            $csh->add($newpass);
-            my $saltedhash = $csh->generate;
+            my $saltedhash = gen_hash($newpass);
 
             # Update DB
             my $users = $c->mango->db->collection('user');
