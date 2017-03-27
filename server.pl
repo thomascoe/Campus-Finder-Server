@@ -246,13 +246,37 @@ group {
         get '/locations' => sub {
             my $c = shift;
             my $locations = $c->mango->db->collection('locations');
+
+            # TODO: Allow filter by type
             my $docs = $locations->find({}, {_id => 0})->all;
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
         post '/locations' => sub {
             my $c = shift;
-            $c->respond_to(any => { json => {}, status => 200});
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+            my $loc = $c->req->json;
+            if (not defined $loc->{name}
+                    or not defined $loc->{type}
+                    or not defined $loc->{description}
+                    or not defined $loc->{latitude}
+                    or not defined $loc->{longitude}) {
+                $c->respond_to(any => { json => {error => 'Missing Required Params'},
+                                        status => 400});
+                return;
+            }
+
+            # Set extra params
+            $loc->{username} = $user;
+            $loc->{timestamp} = gmtime->datetime . 'Z';
+            $loc->{upvotes} = 0;
+            $loc->{downvotes} = 0;
+
+            # Insert into database
+            my $locations = $c->mango->db->collection('locations');
+            $locations->insert($loc);
+
+            $c->respond_to(any => { json => $loc, status => 200});
         };
     };
 };
