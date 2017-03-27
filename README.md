@@ -18,7 +18,7 @@ Gatech Campus Finder
 * Basic
     * `./server.pl daemon -l http://*:8080`
 * Alternatively, you can run with the morbo development server, which reloads application after each change
-    * `morbo server.pl`
+    * `morbo -l http://*:8080 server.pl`
 * To run in background disconnected from terminal
     * `nohup ./server.pl daemon -l http://*:8080&`
 
