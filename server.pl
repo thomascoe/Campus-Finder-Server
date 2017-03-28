@@ -19,7 +19,7 @@ sub send_verification_email {
     my $email = $user->{email};
     my $code = $user->{emailvercode};
 
-    # Send email to new user with confirmation link
+    # Send email to user with confirmation link
     my $link = "https://thomascoe.com/campus-finder/v1/auth/verify?email=$email&code=$code";
     my $from = 'campusfinder@thomascoe.com';
     my $subject = 'Welcome to Campus Finder!';
@@ -54,7 +54,6 @@ group {
 
         # User Login, returns a token for user to use as password
         post '/login' => sub {
-            # Get parameters
             my $c = shift;
             my $username = $c->param('username');
             my $password = $c->param('password');
@@ -89,7 +88,7 @@ group {
 
             # Store session in db
             my $sessions = $c->mango->db->collection('sessions');
-            my $oid = $sessions->insert({
+            $sessions->insert({
                 username => $username,
                 token => $token,
                 timestamp => $timestring
@@ -102,7 +101,6 @@ group {
 
         # User register
         post '/register' => sub {
-            # Get Parameters
             my $c = shift;
             my $username = $c->param('username');
             my $email = $c->param('email');
@@ -113,13 +111,14 @@ group {
                 return;
             }
 
+            # Verify password strength
             if (not is_strong_pass($password)) {
                 $c->respond_to(any => { json => {error => 'Weak Password'},
                                         status => 400});
                 return;
             }
 
-            # Check if user already exists
+            # Check if email or username already exists
             my $users = $c->mango->db->collection('user');
             my $doc1 = $users->find_one({username => $username});
             my $doc2 = $users->find_one({email => $email});
@@ -151,6 +150,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Reset password for a user-> sends temp password in email
         post '/resetpass' => sub {
             my $c = shift;
             my $email = $c->param('email');
@@ -178,6 +178,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Resend the verification email if a user isn't verified
         post '/resendverification' => sub {
             my $c = shift;
             my $email = $c->param('email');
@@ -197,6 +198,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Verify a users email
         get '/verify' => sub {
             my $c = shift;
             my $email = $c->param('email');
@@ -241,11 +243,11 @@ group {
             });
         };
 
+        # Update a users password
         post '/auth/updatepass' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
             my $newpass = $c->param('newpass');
-
             if (not defined $newpass) {
                 $c->respond_to(any => { json => {error => 'Bad Request'},
                                         status => 400});
@@ -268,6 +270,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Logout (invalidate a session)
         post '/auth/logout' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -276,6 +279,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Return all of the valid location types
         get '/types' => sub {
             my $c = shift;
             my $types = $c->mango->db->collection('types');
@@ -283,15 +287,18 @@ group {
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
+        # Return all of the locations
         get '/locations' => sub {
             my $c = shift;
             my $locations = $c->mango->db->collection('locations');
+            # TODO: Bound these locations by lat/long? Sort?
 
             # TODO: Allow filter by type? maybe do client side?
             my $docs = $locations->find({}, {name => 1, type => 1, latitude => 1, longitude => 1})->all;
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
+        # Add a new location to the db
         post '/locations' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -326,6 +333,7 @@ group {
             $c->respond_to(any => { json => $loc, status => 200});
         };
 
+        # Get location details
         get '/locations/:locationid' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -351,6 +359,7 @@ group {
             $c->respond_to(any => { json => $doc, status => 200});
         };
 
+        # Mark your vote on a location
         post '/locations/:locationid/vote' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -411,6 +420,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Get the comments on a location
         get '/locations/:locationid/comments' => sub {
             my $c = shift;
             my $locid = $c->param('locationid');
@@ -435,6 +445,7 @@ group {
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
+        # Add a new comment to a location
         post '/locations/:locationid/comments' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -468,6 +479,7 @@ group {
             $c->respond_to(any => { json => {}, status => 200});
         };
 
+        # Delete a comment from a location (only works if you wrote the comment)
         del '/locations/:locationid/comments/:commentid' => sub {
             my $c = shift;
             my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
@@ -504,7 +516,5 @@ group {
         };
     };
 };
-
-
 
 app->start;
