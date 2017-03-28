@@ -385,6 +385,63 @@ group {
             $votes->update({locationid => $locid, username => $user}, {'$set' => {vote => $vote}}, {upsert => 1});
             $c->respond_to(any => { json => {}, status => 200});
         };
+
+        get '/locations/:locationid/comments' => sub {
+            my $c = shift;
+            my $locid = $c->param('locationid');
+
+            # optional params
+            my $count = $c->param('count') + 0;
+            my $sort = $c->param('sort');
+            # TODO: Use these params
+
+            # Look up location
+            my $oid = Mango::BSON::ObjectID->new($locid);
+            my $locations = $c->mango->db->collection('locations');
+            my $doc = $locations->find_one({_id => $oid});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => "Location not found"}, status => 404});
+                return;
+            }
+
+            # Look up comments for this location
+            my $comments = $c->mango->db->collection('comments');
+            my $docs = $comments->find({locationid => $locid})->all;
+            $c->respond_to(any => { json => $docs, status => 200});
+        };
+
+        post '/locations/:locationid/comments' => sub {
+            my $c = shift;
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+            my $locid = $c->param('locationid');
+
+            # Get comment content
+            my $content = $c->req->text;
+            if ($content eq "") {
+                $c->respond_to(any => { json => {error => "No comment body"}, status => 400});
+                return;
+            }
+
+            # Look up location
+            my $oid = Mango::BSON::ObjectID->new($locid);
+            my $locations = $c->mango->db->collection('locations');
+            my $doc = $locations->find_one({_id => $oid});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => "Location not found"}, status => 404});
+                return;
+            }
+
+            # Insert comment into db
+            my $timestring = gmtime->datetime . 'Z';
+            my $comments = $c->mango->db->collection('comments');
+            $comments->insert({
+                locationid => $locid,
+                username => $user,
+                timestamp => $timestring,
+                content => $content
+            });
+            $c->respond_to(any => { json => {}, status => 200});
+        }
     };
 };
 
