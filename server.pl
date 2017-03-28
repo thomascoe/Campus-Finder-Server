@@ -406,7 +406,7 @@ group {
 
             # Look up comments for this location
             my $comments = $c->mango->db->collection('comments');
-            my $docs = $comments->find({locationid => $locid})->all;
+            my $docs = $comments->find({locationid => $locid}, {locationid => 0})->all;
             $c->respond_to(any => { json => $docs, status => 200});
         };
 
@@ -441,7 +441,42 @@ group {
                 content => $content
             });
             $c->respond_to(any => { json => {}, status => 200});
-        }
+        };
+
+        del '/locations/:locationid/comments/:commentid' => sub {
+            my $c = shift;
+            my ($user, $pass) = split /:/, $c->req->url->to_abs->userinfo;
+            my $locid = $c->param('locationid');
+            my $commentid = $c->param('commentid');
+
+            # Look up location
+            my $loc_oid = Mango::BSON::ObjectID->new($locid);
+            my $locations = $c->mango->db->collection('locations');
+            my $loc_doc = $locations->find_one({_id => $loc_oid});
+            if (not defined $loc_doc) {
+                $c->respond_to(any => { json => {error => "Location not found"}, status => 404});
+                return;
+            }
+
+            # Look up comment
+            my $comments = $c->mango->db->collection('comments');
+            my $com_oid = Mango::BSON::ObjectID->new($commentid);
+            my $com_doc = $comments->find_one({_id => $com_oid});
+            if (not defined $com_doc) {
+                $c->respond_to(any => { json => {error => "Comment not found"}, status => 404});
+                return;
+            }
+
+            # Verify that this user actually created this comment
+            if ($com_doc->{username} ne $user) {
+                $c->respond_to(any => { json => {error => "You are not the owner of this comment"}, status => 403});
+                return;
+            }
+
+            # Remove the comment
+            $comments->remove($com_oid);
+            $c->respond_to(any => { json => {}, status => 200});
+        };
     };
 };
 
