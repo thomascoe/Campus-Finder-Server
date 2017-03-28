@@ -14,6 +14,19 @@ sub send_email {
     `echo "$body" | mail -s "$subject" -r "$from" $to`;
 }
 
+sub send_verification_email {
+    my ($user) = @_;
+    my $email = $user->{email};
+    my $code = $user->{emailvercode};
+
+    # Send email to new user with confirmation link
+    my $link = "https://thomascoe.com/campus-finder/v1/auth/verify?email=$email&code=$code";
+    my $from = 'campusfinder@thomascoe.com';
+    my $subject = 'Welcome to Campus Finder!';
+    my $body = "Please verify your email to activate your account\n$link";
+    send_email($email, $from, $subject, $body);
+}
+
 sub is_strong_pass {
     my ($pass) = @_;
     # TODO: Implement pass strength check
@@ -110,7 +123,6 @@ group {
             my $users = $c->mango->db->collection('user');
             my $doc1 = $users->find_one({username => $username});
             my $doc2 = $users->find_one({email => $email});
-            #my $docs = $users->find->all();
             if (defined $doc1 or defined $doc2) {
                 $c->respond_to(any => { json => {error => 'User Already Exists'},
                                         status => 409});
@@ -123,26 +135,20 @@ group {
             # Generate verification code
             my $code = unpack 'h32', `head -c 16 /dev/urandom`;
 
-            # Insert user into DB
-            my $oid = $users->insert({
+            my $user = {
                 username => $username,
                 email => $email,
                 emailverstat => 'unverified',
                 emailvercode => $code,
                 password => $saltedhash,
                 radius => 1
-            });
+            };
 
-            # Send email to new user with confirmation link
-            my $link = "https://thomascoe.com/campus-finder/v1/auth/verify?email=$email&code=$code";
-            my $from = 'campusfinder@thomascoe.com';
-            my $subject = 'Welcome to Campus Finder!';
-            my $body = "Please verify your email to activate your account\n$link";
-            send_email($email, $from, $subject, $body);
+            # Insert user into DB and send verification email
+            my $oid = $users->insert($user);
+            send_verification_email($user);
 
-            # Send response
-            $c->respond_to(any => { json => {userid => $oid},
-                                    status => 200});
+            $c->respond_to(any => { json => {}, status => 200});
         };
 
         post '/resetpass' => sub {
@@ -169,6 +175,25 @@ group {
             my $body = "Your Campus Finder password has been reset.\nUsername: $doc->{username}\nYour new temporary password is: $pw\nPlease change this immediately!";
             send_email($email, $from, $subject, $body);
 
+            $c->respond_to(any => { json => {}, status => 200});
+        };
+
+        post '/resendverification' => sub {
+            my $c = shift;
+            my $email = $c->param('email');
+            my $users = $c->mango->db->collection('user');
+            my $doc = $users->find_one({email => $email});
+            if (not defined $doc) {
+                $c->respond_to(any => { json => {error => 'User Not Found'},
+                                        status => 400});
+                return;
+            }
+            if ($doc->{emailverstat} eq 'verified') {
+                $c->respond_to(any => { json => {error => 'User already verified'},
+                                        status => 400});
+                return;
+            }
+            send_verification_email($doc);
             $c->respond_to(any => { json => {}, status => 200});
         };
 
