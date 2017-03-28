@@ -269,7 +269,12 @@ group {
                 return;
             }
 
-            # TODO: Verify type is valid
+            # Verify type is valid
+            my $types = $c->mango->db->collection('types');
+            if (not defined $types->find_one({type => $loc->{type}})) {
+                $c->respond_to(any => { json => {error => 'Invalid type'}, status => 400});
+                return;
+            }
 
             # Set extra params
             $loc->{username} = $user;
