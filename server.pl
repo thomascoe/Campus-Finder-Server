@@ -156,7 +156,19 @@ group {
                 return;
             }
 
-            #TODO: Send email with temp password
+            # Generate temp password
+            my $pw = unpack 'h16', `head -c 8 /dev/urandom`;
+            my $saltedhash = gen_hash($pw);
+
+            # Update db
+            $users->update($doc->{_id}, {'$set' => {password => $saltedhash}});
+
+            # Send email with temp password
+            my $from = 'campusfinder@thomascoe.com';
+            my $subject = 'Campus Finder Password Reset';
+            my $body = "Your Campus Finder password has been reset.\nUsername: $doc->{username}\nYour new temporary password is: $pw\nPlease change this immediately!";
+            send_email($email, $from, $subject, $body);
+
             $c->respond_to(any => { json => {}, status => 200});
         };
 
