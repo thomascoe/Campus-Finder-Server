@@ -64,7 +64,7 @@ group {
             }
 
             # Lookup user in DB
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             my $doc = $users->find_one({username => $username});
 
             # Verify Password
@@ -119,7 +119,7 @@ group {
             }
 
             # Check if email or username already exists
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             my $doc1 = $users->find_one({username => $username});
             my $doc2 = $users->find_one({email => $email});
             if (defined $doc1 or defined $doc2) {
@@ -154,7 +154,7 @@ group {
         post '/resetpass' => sub {
             my $c = shift;
             my $email = $c->param('email');
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             my $doc = $users->find_one({email => $email});
             if (not defined $doc) {
                 $c->respond_to(any => { json => {error => 'User Not Found'},
@@ -182,7 +182,7 @@ group {
         post '/resendverification' => sub {
             my $c = shift;
             my $email = $c->param('email');
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             my $doc = $users->find_one({email => $email});
             if (not defined $doc) {
                 $c->respond_to(any => { json => {error => 'User Not Found'},
@@ -205,7 +205,7 @@ group {
             my $code = $c->param('code');
 
             # Lookup user to get verification status and code
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             my $doc = $users->find_one({email => $email});
 
             # Error handling
@@ -265,7 +265,7 @@ group {
             my $saltedhash = gen_hash($newpass);
 
             # Update DB
-            my $users = $c->mango->db->collection('user');
+            my $users = $c->mango->db->collection('users');
             $users->update({username => $user}, {'$set' => {password => $saltedhash}});
             $c->respond_to(any => { json => {}, status => 200});
         };
