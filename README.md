@@ -1,5 +1,6 @@
 # Campus-Finder-Server
-Gatech Campus Finder
+![CampusFinder Logo](/logo.png?raw=true)
+Gatech Campus Finder is a crowdsourced platform which allows users to submit, comment, and vote on different points of interest around the Georgia Tech campus. Example usage includes documenting and sharing locations such as student-accessible printers, bathrooms, vending machines, and visitor parking. This server is built in Perl with a RESTful API which enables multiple clients to access the data provided.
 
 ## Dependencies
 * Perl
