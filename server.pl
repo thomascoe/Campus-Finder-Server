@@ -9,6 +9,10 @@ use Mojo::JSON qw(decode_json encode_json);
 use Mango;
 plugin 'basic_auth';
 
+# Globals
+my $FROM_EMAIL = 'campusfinder@thomascoe.com';
+my $ROOT_DOMAIN = 'https://thomascoe.com/campus-finder';
+
 sub send_email {
     my ($to, $from, $subject, $body) = @_;
     `echo "$body" | mail -s "$subject" -r "$from" $to`;
@@ -20,11 +24,10 @@ sub send_verification_email {
     my $code = $user->{emailvercode};
 
     # Send email to user with confirmation link
-    my $link = "https://thomascoe.com/campus-finder/v1/auth/verify?email=$email&code=$code";
-    my $from = 'campusfinder@thomascoe.com';
+    my $link = $ROOT_DOMAIN."/v1/auth/verify?email=$email&code=$code";
     my $subject = 'Welcome to Campus Finder!';
     my $body = "Please verify your email to activate your account\n$link";
-    send_email($email, $from, $subject, $body);
+    send_email($email, $FROM_EMAIL, $subject, $body);
 }
 
 sub is_strong_pass {
@@ -170,10 +173,9 @@ group {
             $users->update($doc->{_id}, {'$set' => {password => $saltedhash}});
 
             # Send email with temp password
-            my $from = 'campusfinder@thomascoe.com';
             my $subject = 'Campus Finder Password Reset';
             my $body = "Your Campus Finder password has been reset.\nUsername: $doc->{username}\nYour new temporary password is: $pw\nPlease change this immediately!";
-            send_email($email, $from, $subject, $body);
+            send_email($email, $FROM_EMAIL, $subject, $body);
 
             $c->respond_to(any => { json => {}, status => 200});
         };
@@ -291,9 +293,8 @@ group {
         get '/locations' => sub {
             my $c = shift;
             my $locations = $c->mango->db->collection('locations');
-            # TODO: Bound these locations by lat/long? Sort?
+            # TODO: Bound these locations by lat/long?
 
-            # TODO: Allow filter by type? maybe do client side?
             my $docs = $locations->find({}, {name => 1, type => 1, latitude => 1, longitude => 1})->all;
             $c->respond_to(any => { json => $docs, status => 200});
         };
